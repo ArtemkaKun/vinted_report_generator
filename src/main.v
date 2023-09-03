@@ -4,6 +4,7 @@ import json
 import encoding.csv
 import time
 import os
+import net.http
 
 struct ReportRequestResponse {
 	invoice_lines []InvoiceLine
@@ -26,11 +27,18 @@ fn main() {
 		year -= 1
 	}
 
-	result := os.execute("curl 'https://www.vinted.pl/api/v2/wallet/invoices/${year}/${previous_month}' -H 'Accept: application/json, text/plain' -H 'Cookie: _vinted_fr_session=${os.args[1]};'")
+	mut report_request := http.new_request(http.Method.get, 'https://www.vinted.pl/api/v2/wallet/invoices/${year}/${previous_month}',
+		'')
+	report_request.add_header(http.CommonHeader.accept, 'application/json, text/plain')
+	report_request.cookies['_vinted_fr_session'] = os.args[1]
 
-	needed_data := '{${result.output.all_after_first('{')}'
+	response := report_request.do() or { panic('Failed to send request') }
 
-	deserialized_response := json.decode(ReportRequestResponse, needed_data) or {
+	if response.status_code != 200 {
+		panic('Failed to get report')
+	}
+
+	deserialized_response := json.decode(ReportRequestResponse, response.body) or {
 		panic('Failed to deserialize response')
 	}
 
