@@ -12,6 +12,7 @@ struct ReportRequestResponse {
 
 struct InvoiceLine {
 	@type    string
+	title    string
 	subtitle string
 	date     string
 	amount   string
@@ -42,25 +43,32 @@ fn main() {
 		panic('Failed to deserialize response')
 	}
 
-	debit_invoices := deserialized_response.invoice_lines.filter(it.@type == 'debit')
+	debit_invoices := deserialized_response.invoice_lines.filter(it.@type == 'debit'
+		&& it.title == 'Sprzedane')
 
-	mut report_writer := csv.new_writer()
+	mut report_writer := csv.new_writer(csv.WriterConfig{ delimiter: `;` })
 
 	report_writer.write(['Data', 'Przedmiot', 'Kwota']) or { panic('Failed to write header') }
 
 	mut income_sum := 0.0
 
 	for invoice in debit_invoices {
-		date := time.parse_iso8601(invoice.date) or { panic('Failed to parse date') }
+		date_without_timezone := invoice.date.all_before('+')
+		normalized_date := date_without_timezone.replace('T', ' ')
 
-		report_writer.write([date.str().split(' ')[0], invoice.subtitle, invoice.amount]) or {
+		date := time.parse(normalized_date) or { panic('Failed to parse date') }
+
+		report_writer.write([date.str().split(' ')[0], invoice.subtitle, invoice.amount.replace('.',
+			',')]) or {
 			panic('Failed to write invoice')
 		}
 
 		income_sum += invoice.amount.f64()
 	}
 
-	report_writer.write(['', 'Suma', '${income_sum:.2}']) or { panic('Failed to write sum') }
+	report_writer.write(['', 'Suma', '${income_sum:.2}'.replace('.', ',')]) or {
+		panic('Failed to write sum')
+	}
 
 	os.write_file('report.csv', report_writer.str()) or { panic('Failed to write report') }
 }
